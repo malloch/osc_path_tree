@@ -13,6 +13,6 @@ int main (int argc, const char * argv[]) {
     tree_add_string(root, "baa");
     tree_print(root, 0);
 
-    printf("search %i\n", tree_match_string(root, "foodd"));
+    printf("search %i\n", tree_match_string(root, "barbeque"));
     return 0;
 }

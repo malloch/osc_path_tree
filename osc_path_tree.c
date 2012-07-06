@@ -6,14 +6,14 @@
 typedef struct _tree_node {
     char *string;
     int string_len;
-    int is_root;
     int is_endpoint;
     void *payload;
+    struct _tree_node *parent;
     struct _tree_node *leaves;
     struct _tree_node *next;
 } *tree_node;
 
-int tree_match_string_internal(tree_node root, const char *string, int *status);
+tree_node tree_match_string_internal(tree_node root, const char *string, int *status);
 
 int compare_strings(const char *l, char *r)
 {
@@ -32,13 +32,12 @@ int compare_strings(const char *l, char *r)
 tree_node tree_new()
 {
     tree_node node = (tree_node) calloc(1, sizeof(struct _tree_node));
-    node->is_root = 1;
     return node;
 }
 
 void tree_print(struct _tree_node *root, int level)
 {
-    if (!root->is_root) {
+    if (root->parent) {
         int i;
         for (i=0; i<level; i++) {
             printf(" ");
@@ -58,7 +57,7 @@ void tree_print(struct _tree_node *root, int level)
 int tree_add_string(tree_node root, char *string)
 {
     tree_node leaf;
-    if (!root->is_root) {
+    if (root->parent) {
         int offset = compare_strings(root->string, string);
         string += offset;
         if (!offset) {
@@ -69,10 +68,11 @@ int tree_add_string(tree_node root, char *string)
             if (offset < root->string_len) {
                 // we need to split the root->string and create 1 new leaf.
                 leaf = (tree_node) calloc(1, sizeof(struct _tree_node));
-                leaf->string = strdup(root->string+offset);;
+                leaf->string = strdup(root->string+offset);
                 leaf->string_len = root->string_len-offset;
                 leaf->is_endpoint = 1;
-                leaf->next = root->leaves;
+                leaf->parent = root;
+                leaf->leaves = root->leaves;
 
                 root->string = (char*) realloc(root->string, offset+1);
                 root->string[offset] = 0;
@@ -104,12 +104,14 @@ int tree_add_string(tree_node root, char *string)
                 leaf->string = strdup(string);
                 leaf->string_len = strlen(string);
                 leaf->is_endpoint = 1;
-                leaf->next = root->leaves;
+                leaf->parent = root;
 
                 leaf2 = (tree_node) calloc(1, sizeof(struct _tree_node));
                 leaf2->string = strdup(root->string+offset);
                 leaf2->string_len = root->string_len-offset;
                 leaf2->is_endpoint = 1;
+                leaf2->parent = root;
+                leaf2->leaves = root->leaves;
                 leaf2->next = leaf;
 
                 root->string = (char*) realloc(root->string, offset+1);
@@ -146,6 +148,7 @@ process_leaves:
     leaf->string = strdup(string);
     leaf->string_len = strlen(string);
     leaf->is_endpoint = 1;
+    leaf->parent = root;
     leaf->next = root->leaves;
     root->leaves = leaf;
     return 0;
@@ -153,23 +156,23 @@ process_leaves:
 
 void tree_remove_string(tree_node root, const char *string)
 {
+    // traverse tree, matching as we go
 }
 
 int tree_match_string(tree_node root, const char *string)
 {
     int status = 0;
-    return tree_match_string_internal(root, string, &status);
+    return !tree_match_string_internal(root, string, &status);
 }
 
-int tree_match_string_internal(tree_node root, const char *string, int *status)
+tree_node tree_match_string_internal(tree_node root, const char *string, int *status)
 {
     int internal_status = *status;
-    if (!root->is_root) {
+    tree_node node;
+    if (root->parent) {
         int offset = compare_strings(root->string, (char *)string);
-        if (offset < root->string_len) {
-            // not a match
-            return 1;
-        }
+        if (offset < root->string_len)
+            return 0;
         else {
             // substring match, continue to leaves
             (*status)++;
@@ -177,15 +180,16 @@ int tree_match_string_internal(tree_node root, const char *string, int *status)
             string += offset;
         }
     }
-    if (!*string)
-        return 0;
+    if (!*string) 
+        return root;
     tree_node leaf = root->leaves;
     while (leaf) {
-        if (!tree_match_string_internal(leaf, string, status))
-            return 0;
+        node = tree_match_string_internal(leaf, string, status);
+        if (node)
+            return node;
         if (*status > internal_status)
-            return 1;
+            return 0;
         leaf = leaf->next;
     }
-    return 1;
+    return 0;
 }
