@@ -71,13 +71,16 @@ int tree_add_string(tree_node root, char *string)
                 leaf->string = strdup(root->string+offset);
                 leaf->string_len = root->string_len-offset;
                 leaf->is_endpoint = 1;
-                leaf->parent = root;
-                leaf->leaves = root->leaves;
 
                 root->string = (char*) realloc(root->string, offset+1);
                 root->string[offset] = 0;
                 root->string_len = offset;
                 root->is_endpoint = 1;
+
+                leaf->parent = root;
+                if (root->leaves)
+                    root->leaves->parent = leaf;
+                leaf->leaves = root->leaves;
                 root->leaves = leaf;
 
                 return 0;
@@ -104,20 +107,23 @@ int tree_add_string(tree_node root, char *string)
                 leaf->string = strdup(string);
                 leaf->string_len = strlen(string);
                 leaf->is_endpoint = 1;
-                leaf->parent = root;
 
                 leaf2 = (tree_node) calloc(1, sizeof(struct _tree_node));
                 leaf2->string = strdup(root->string+offset);
                 leaf2->string_len = root->string_len-offset;
                 leaf2->is_endpoint = 1;
-                leaf2->parent = root;
-                leaf2->leaves = root->leaves;
-                leaf2->next = leaf;
 
                 root->string = (char*) realloc(root->string, offset+1);
                 root->string[offset] = 0;
                 root->string_len = offset;
                 root->is_endpoint = 0;
+
+                leaf->parent = leaf2;
+                leaf2->next = leaf;
+                if (root->leaves)
+                    root->leaves->parent = leaf2;
+                leaf2->leaves = root->leaves;
+                leaf2->parent = root;
                 root->leaves = leaf2;
 
                 return 0;
