@@ -43,9 +43,9 @@ void tree_print(struct _tree_node *root, int level)
             printf(" ");
         }
         if (root->is_endpoint)
-            printf("%s ] (%i)\n", root->string, root->string_len);
+            printf("%s •    (address: %p) (parent: %p)\n", root->string, root, root->parent);
         else
-            printf("%s (%i)\n", root->string, root->string_len);
+            printf("%s ¬    (address: %p) (parent: %p)\n", root->string, root, root->parent);
     }
     tree_node leaf = root->leaves;
     while (leaf) {
@@ -155,14 +155,65 @@ process_leaves:
     leaf->string_len = strlen(string);
     leaf->is_endpoint = 1;
     leaf->parent = root;
-    leaf->next = root->leaves;
+    if (root->leaves) {
+        root->leaves->parent = leaf;
+        leaf->next = root->leaves;
+    }
     root->leaves = leaf;
     return 0;
 }
 
-void tree_remove_string(tree_node root, const char *string)
+int tree_remove_string(tree_node root, const char *string)
 {
-    // traverse tree, matching as we go
+    int result;
+    if (root->parent) {
+        int offset = compare_strings(root->string, (char *)string);
+        if (offset < root->string_len)
+            return 1;
+        // substring match
+        string += offset;
+        if (!*string) {
+            // finished matching, can delete?
+            return 0;
+        }
+    }
+    // continue to leaves
+    tree_node leaf = root->leaves;
+    while (leaf) {
+        result = tree_remove_string(leaf, string);
+        if (!result && !leaf->leaves) {
+            // can delete this leaf
+            if (leaf->next)
+                leaf->next->parent = leaf->parent;
+            if (leaf->parent != root)
+                leaf->parent->next = leaf->next;
+            else
+                root->leaves = leaf->next;
+            if (leaf->string)
+                free(leaf->string);
+            free(leaf);
+            // check if we can consolidate strings
+            result = 0;
+            leaf = root->leaves;
+            while (leaf) {
+                result++;
+                leaf = leaf->next;
+            }
+            if (result == 1) {
+                // we can consolidate strings!
+                leaf = root->leaves;
+                root->string = (char*) realloc(root->string, root->string_len
+                                               + leaf->string_len + 1);
+                strcat(root->string, leaf->string);
+                root->leaves = leaf->leaves;
+                free(leaf->string);
+                free(leaf);
+            }
+            return 0;
+        }
+        leaf = leaf->next;
+    }
+    return 1;
 }
 
 int tree_match_string(tree_node root, const char *string)
@@ -180,7 +231,7 @@ tree_node tree_match_string_internal(tree_node root, const char *string, int *st
         if (offset < root->string_len)
             return 0;
         else {
-            // substring match, continue to leaves
+            // substring match
             (*status)++;
             internal_status++;
             string += offset;
@@ -188,6 +239,7 @@ tree_node tree_match_string_internal(tree_node root, const char *string, int *st
     }
     if (!*string) 
         return root;
+    // continue to leaves
     tree_node leaf = root->leaves;
     while (leaf) {
         node = tree_match_string_internal(leaf, string, status);
