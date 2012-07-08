@@ -24,8 +24,10 @@ int compare_strings(const char *l, char *r)
     char *str = (char*)l;
     int i = 0;
     while (*str && *r) {
-        if (*(str++) != *(r++))
+        if ((*str != *r) && (*str != '?') && (*r != '?'))
             break;
+        str++;
+        r++;
         i++;
     }
     return i;
