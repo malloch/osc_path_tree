@@ -11,7 +11,7 @@ int main (int argc, const char * argv[]) {
     tree_add_string(root, "/barbeque");
     tree_add_string(root, "/barby");
     tree_add_string(root, "/baa");
-    tree_add_string(root, "/{barbara,badass}/foo");
+    tree_add_string(root, "/{barbara,badass}/foo{d,l,tsies}");
     tree_print(root, 0);
     printf("************************\n");
     tree_remove_string(root, "/baa");
@@ -21,3 +21,8 @@ int main (int argc, const char * argv[]) {
     printf("search %i\n", tree_match_string(root, "bar"));
     return 0;
 }
+
+
+// notes:
+//  need to handle string[0] != '/' e.g. "{/foo,/bar}"
+//  need to test with ? wildcards (handler and message)
