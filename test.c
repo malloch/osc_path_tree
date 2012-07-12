@@ -11,7 +11,7 @@ int main (int argc, const char * argv[]) {
     tree_add_string(root, "/barbeque");
     tree_add_string(root, "/barby");
     tree_add_string(root, "/baa");
-    tree_add_string(root, "/{barbara,badass}/foo{d,l,tsies}");
+    tree_add_string(root, "/{barbara,badass}/foo{d,l,tsie}s");
     tree_print(root, 0);
     printf("************************\n");
     tree_remove_string(root, "/baa");

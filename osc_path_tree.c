@@ -13,7 +13,8 @@ typedef struct _tree_node {
     struct _tree_node *next;
 } *tree_node;
 
-tree_node tree_add_string_internal(tree_node root, char *string, int is_endpoint);
+tree_node tree_add_string_internal(tree_node root, char *string,
+                                   int force_as_leaf, int is_endpoint);
 tree_node tree_match_string_internal(tree_node root, const char *string, int *status);
 
 int compare_strings(const char *l, char *r)
@@ -21,6 +22,8 @@ int compare_strings(const char *l, char *r)
     // TODO: OSC pattern matching!
     // *?![][-][!]{,}
     // will handle {} at tree level
+    if (!l || !r)
+        return 0;
     char *str = (char*)l;
     int i = 0;
     while (*str && *r) {
@@ -51,10 +54,10 @@ void tree_print(struct _tree_node *root, int level)
         else
             printf("%s ¬    (address: %p) (parent: %p)\n", root->string, root, root->parent);
     }
-    tree_node leaf = root->leaves;
-    while (leaf) {
-        tree_print(leaf, level+1);
-        leaf = leaf->next;
+    if (root->leaves)
+        tree_print(root->leaves, level+1);
+    if (root->next) {
+        tree_print(root->next, level);
     }
 }
 
@@ -109,49 +112,56 @@ int tree_add_string(tree_node root, char *string)
     int result = tree_check_string(string);
     if (result)
         return 1;
-    return !tree_add_string_internal(root, string+1, 1);
+    return !tree_add_string_internal(root, string+1, 0, 1);
 }
 
-tree_node tree_add_string_internal(tree_node root, char *string, int is_endpoint)
+tree_node tree_add_string_internal(tree_node root, char *string,
+                                   int force_as_leaf, int is_endpoint)
 {
-    printf("tree_add_string_internal: %s\n", string);
+    printf("tree_add_string_internal: %p, %s\n", root, string);
     tree_node leaf;
 
     if (strchr(string, '{')) {
-        char *ptr;
+        char *dup, *end;
+        int len, span;
         // split the list and add each element to tree
         // Assume string has already been checked for illegal sequences
-
+printf("string = %s\n", string);
         // First add string before opening brace
-        if (string[0] != '{') {
-            ptr = strtok(string, "{");
-            root = tree_add_string_internal(root, ptr, 0);
-            string += strlen(ptr)+1;
+        if (span = strcspn(string, "{")) {
+            string[span] = 0;
+            root = tree_add_string_internal(root, string, 0, 0);
+            string += span+1;
         }
         else
             string += 1;
+printf("string = %s\n", string);
 
         // next handle list of possible strings
-        char *list = strdup(string);
-        ptr = strchr(list, '}');
-        ptr[0] = 0;
-        char *dup = (char*) calloc(1, strlen(string));
-        int len = strlen(string);
-        string += strlen(list)+1;
+        dup = (char*) calloc(1, strlen(string));
+        len = strlen(string);
+        printf("string length is %i\n", len);
+        span = strcspn(string, "}");
+        printf("span = %i\n", span);
+        string[span] = 0;
+        printf("string is now %s\n", string);
+        end = strdup(string+span+1);
+        printf("end is %s\n", end);
 
-        ptr = strtok(list, ",");
-        while (ptr != NULL) {
-            snprintf(dup, len, "%s%s", ptr, string);
+        // next handle list of possible strings
+        while (span = strcspn(string, ",")) {
+            string[span] = 0;
+            snprintf(dup, len, "%s%s", string, end);
             printf("gonna add %s to %p\n", dup, root);
-            leaf = tree_add_string_internal(root, dup, 1);
-            ptr = strtok(NULL, ",");
+            //leaf = tree_add_string_internal(root, dup, 1, 1);
+            string += span+1;
         }
-        free(list);
+
+        free(end);
         free(dup);
         return root;
     }
 
-    
     // basically 3 possibilities:
     //  no match - go to next or add sibling
     //  partial match - go to leaves or add leaf
@@ -159,27 +169,35 @@ tree_node tree_add_string_internal(tree_node root, char *string, int is_endpoint
     int offset = compare_strings(root->string, string);
     string += offset;
     if (!offset) {
+        printf("no match\n");
         // doesn't match at all.
-        if (root->next)
-            tree_add_string_internal(root->next, string, is_endpoint);
+        if (root->next) {
+            printf("checking next\n");
+            return tree_add_string_internal(root->next, string,
+                                            force_as_leaf, is_endpoint);
+        }
         else {
-            // need to add sibling leaf
-            printf("adding sibling leaf\n");
+            // need to add sibling or child leaf
+            printf("adding sibling leaf %s\n", string);
             leaf = (tree_node) calloc(1, sizeof(struct _tree_node));
             leaf->string = strdup(string);
             leaf->string_len = strlen(string);
             leaf->is_endpoint += is_endpoint;
             leaf->parent = root;
-            if (root->leaves) {
-                root->leaves->parent = leaf;
+            if (force_as_leaf) {
                 leaf->next = root->leaves;
+                root->leaves = leaf;
             }
-            root->leaves = leaf;
+            else {
+                leaf->next = root->next;
+                root->next = leaf;
+            }
             return leaf;
         }
     }
     else if (!*string) {
         if (offset < root->string_len) {
+            printf("partial match!\n");
             // we need to split the root->string and create 1 new leaf.
             leaf = (tree_node) calloc(1, sizeof(struct _tree_node));
             leaf->string = strdup(root->string+offset);
@@ -199,19 +217,15 @@ tree_node tree_add_string_internal(tree_node root, char *string, int is_endpoint
             return root;
         }
         else {
+            printf("we matched entire string\n");
             // we matched the entire string.
-            if (root->is_endpoint) {
-                // is endpoint, we are done!
-                return root;
-            }
-            else {
-                // we need to mark this node as an endpoint.
-                root->is_endpoint += is_endpoint;
-                return root;
-            }
+            // we need to mark this node as an endpoint.
+            root->is_endpoint += is_endpoint;
+            return root;
         }
     }
     else {
+        printf("we matched a substring\n");
         // we matched a substring.
         if (offset < root->string_len) {
             // we need to split the root->string and create 2 new leaves.
@@ -242,9 +256,13 @@ tree_node tree_add_string_internal(tree_node root, char *string, int is_endpoint
             return leaf;
         }
         else {
+            printf("we matched entire root string\n");
             // we matched entire root->string, proceed to leaves.
-            if (root->leaves)
-                return tree_add_string_internal(root->leaves, string, is_endpoint);
+            if (root->leaves) {
+                printf("checking leaves\n");
+                return tree_add_string_internal(root->leaves, string,
+                                                force_as_leaf, is_endpoint);
+            }
             else {
                 printf("adding leaf\n");
                 leaf = (tree_node) calloc(1, sizeof(struct _tree_node));
@@ -258,7 +276,7 @@ tree_node tree_add_string_internal(tree_node root, char *string, int is_endpoint
         }
     }
 
-    printf("something went wrong!");
+    printf("something went wrong!\n");
     return 0;
 }
 
