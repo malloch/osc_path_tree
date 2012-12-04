@@ -14,7 +14,7 @@ typedef struct _tree_node {
 } *tree_node;
 
 tree_node tree_add_string_internal(tree_node root, char *string,
-                                   int force_as_leaf, int is_endpoint);
+                                   int force_as_leaf, int is_endpoint, tree_node temp);
 tree_node tree_match_string_internal(tree_node root, const char *string, int *status);
 
 int compare_strings(const char *l, char *r)
@@ -112,13 +112,16 @@ int tree_add_string(tree_node root, char *string)
     int result = tree_check_string(string);
     if (result)
         return 1;
-    return !tree_add_string_internal(root, string+1, 0, 1);
+    return !tree_add_string_internal(root, string+1, 0, 1, root);
 }
 
 tree_node tree_add_string_internal(tree_node root, char *string,
-                                   int force_as_leaf, int is_endpoint)
+                                   int force_as_leaf, int is_endpoint, tree_node temp)
 {
     printf("tree_add_string_internal: %p, %s\n", root, string);
+    printf("\n\n");
+    tree_print(temp, 0);
+    printf("\n\n");
     tree_node leaf;
 
     if (strchr(string, '{')) {
@@ -130,7 +133,7 @@ printf("string = %s\n", string);
         // First add string before opening brace
         if (span = strcspn(string, "{")) {
             string[span] = 0;
-            root = tree_add_string_internal(root, string, 0, 0);
+            root = tree_add_string_internal(root, string, 0, 0, root);
             string += span+1;
         }
         else
@@ -138,26 +141,33 @@ printf("string = %s\n", string);
 printf("string = %s\n", string);
 
         // next handle list of possible strings
-        dup = (char*) calloc(1, strlen(string));
         len = strlen(string);
         printf("string length is %i\n", len);
         span = strcspn(string, "}");
         printf("span = %i\n", span);
-        string[span] = 0;
-        printf("string is now %s\n", string);
-        end = strdup(string+span+1);
-        printf("end is %s\n", end);
+        printf("string[span] = %c\n", string[span]);
+        dup = (char*) calloc(1, span+1);
+        snprintf(dup, span+1, "%s", string);
+        printf("string is now %s\n", dup);
+        if (len > span+1) {
+            end = strdup(string+span+1);
+            printf("end is %s\n", end);
+        }
+        else
+            end = 0;
 
         // next handle list of possible strings
-        while (span = strcspn(string, ",")) {
-            string[span] = 0;
-            snprintf(dup, len, "%s%s", string, end);
+        while (span = strcspn(dup, ",")) {
+            dup[span] = 0;
             printf("gonna add %s to %p\n", dup, root);
-            //leaf = tree_add_string_internal(root, dup, 1, 1);
-            string += span+1;
+            leaf = tree_add_string_internal(root, dup, 1, (end == 0), root);
+            if (end)
+                tree_add_string_internal(leaf, end, 0, 1, root);
+            dup += span+1;
         }
 
-        free(end);
+        if (end)
+            free(end);
         free(dup);
         return root;
     }
@@ -174,7 +184,7 @@ printf("string = %s\n", string);
         if (root->next) {
             printf("checking next\n");
             return tree_add_string_internal(root->next, string,
-                                            force_as_leaf, is_endpoint);
+                                            force_as_leaf, is_endpoint, root);
         }
         else {
             // need to add sibling or child leaf
@@ -261,7 +271,7 @@ printf("string = %s\n", string);
             if (root->leaves) {
                 printf("checking leaves\n");
                 return tree_add_string_internal(root->leaves, string,
-                                                force_as_leaf, is_endpoint);
+                                                force_as_leaf, is_endpoint, root);
             }
             else {
                 printf("adding leaf\n");
