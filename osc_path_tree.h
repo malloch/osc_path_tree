@@ -2,7 +2,7 @@
 
 struct _tree_node;
 
-int compare_strings(const char *l, char *r);
+int compare_strings(const char *l, const char *r, int length);
 
 struct _tree_node *tree_new();
 
